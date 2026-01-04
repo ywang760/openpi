@@ -792,7 +792,7 @@ _CONFIGS = [
     TrainConfig(
         # Inference-oriented config: same pi0.5 model as pi05_libero, but the input schema is
         # controlled by openpi.policies.am_isaac_policy (keys: am_isaac/...).
-        name="pi05_libero_am_isaac",
+        name="pi05_am_isaac",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=AmIsaacLiberoDataConfig(
             repo_id="physical-intelligence/libero",
