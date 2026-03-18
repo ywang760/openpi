@@ -62,7 +62,7 @@ def _load_episode(file_path: Path) -> dict[str, np.ndarray]:
     return data
 
 
-def main(input_dir: str, repo_id: str, task_prompt: str = "press the button", fps: int = 30) -> None:
+def main(input_dir: str, repo_id: str, task_prompt: str = "insert the peg into the hole", fps: int = 30) -> None:
     input_path = Path(input_dir).expanduser().resolve()
     output_path = HF_LEROBOT_HOME / repo_id
     if output_path.exists():
