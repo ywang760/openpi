@@ -797,10 +797,10 @@ _CONFIGS = [
         num_train_steps=30_000,
     ),
     TrainConfig(
-        name="pi05_am_bench_peg_in_hole",
+        name="pi05_am_bench_press_button",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/peg_in_hole",
+            repo_id="am_bench/press_button",
             base_config=DataConfig(prompt_from_task=True),
         ),
         batch_size=32,

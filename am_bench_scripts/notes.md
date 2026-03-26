@@ -9,7 +9,7 @@ This is the current step-by-step path for launching the first `pi-0.5` PyTorch f
   - runtime/training adapter for `am_bench` observations and actions
 - `ext/openpi/src/openpi/training/config.py`
   - defines `LeRobotAmBenchDataConfig`
-  - defines `pi05_am_bench_peg_in_hole`
+  - defines `pi05_am_bench_press_button`
 - `ext/openpi/am_bench_scripts/hdf5_to_lerobot.py`
   - converts raw AM Isaac HDF5 episodes into LeRobot format
 
@@ -19,7 +19,7 @@ This is the current step-by-step path for launching the first `pi-0.5` PyTorch f
 - `ext/openpi/am_bench_scripts/convert_dataset.sh`
   - converts raw AM Isaac HDF5 episodes into a LeRobot dataset under `~/.cache/huggingface/lerobot`
 - `ext/openpi/am_bench_scripts/compute_norm_stats.sh`
-  - computes norm stats for the default `pi05_am_bench_peg_in_hole` config
+  - computes norm stats for the default `pi05_am_bench_press_button` config
 - `ext/openpi/am_bench_scripts/train.sh`
   - launches PyTorch fine-tuning with single-node multi-GPU `torchrun`
   - exposes a few common `train_pytorch.py` CLI options near the top of the file for easy editing
@@ -65,13 +65,13 @@ What this does:
 Default output dataset:
 
 ```bash
-~/.cache/huggingface/lerobot/am_bench/peg_in_hole
+~/.cache/huggingface/lerobot/am_bench/press_button
 ```
 
 Quick check:
 
 ```bash
-find ~/.cache/huggingface/lerobot/am_bench/peg_in_hole -maxdepth 2 -type f | sort
+find ~/.cache/huggingface/lerobot/am_bench/press_button -maxdepth 2 -type f | sort
 ```
 
 
@@ -85,20 +85,20 @@ Run:
 
 What this does:
 
-- loads the converted `am_bench/peg_in_hole` LeRobot dataset
-- runs the default `pi05_am_bench_peg_in_hole` data path
+- loads the converted `am_bench/press_button` LeRobot dataset
+- runs the default `pi05_am_bench_press_button` data path
 - writes normalization statistics for `state` and `actions`
 
 Expected output:
 
 ```bash
-./assets/pi05_am_bench_peg_in_hole/am_bench/peg_in_hole/norm_stats.json
+./assets/pi05_am_bench_press_button/am_bench/press_button/norm_stats.json
 ```
 
 Quick check:
 
 ```bash
-ls ./assets/pi05_am_bench_peg_in_hole/am_bench/peg_in_hole/norm_stats.json
+ls ./assets/pi05_am_bench_press_button/am_bench/press_button/norm_stats.json
 ```
 
 ## Step 4: Launch Training
@@ -106,12 +106,12 @@ ls ./assets/pi05_am_bench_peg_in_hole/am_bench/peg_in_hole/norm_stats.json
 Choose an experiment name and run:
 
 ```bash
-./am_bench_scripts/train.sh peg_in_hole_v1
+./am_bench_scripts/train.sh press_button_v1
 ```
 
 What this does:
 
-- loads `pi05_am_bench_peg_in_hole`
+- loads `pi05_am_bench_press_button`
 - launches `torchrun` with `--nnodes=1 --nproc_per_node=4`
 - loads the converted base PyTorch checkpoint from:
 
@@ -119,7 +119,7 @@ What this does:
 ~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch
 ```
 
-- trains using the LeRobot dataset `am_bench/peg_in_hole`
+- trains using the LeRobot dataset `am_bench/press_button`
 
 Batching note:
 
@@ -129,13 +129,13 @@ Batching note:
 - writes checkpoints under:
 
 ```bash
-./checkpoints/pi05_am_bench_peg_in_hole/peg_in_hole_v1
+./checkpoints/pi05_am_bench_press_button/press_button_v1
 ```
 
 Quick check during training:
 
 ```bash
-find ./checkpoints/pi05_am_bench_peg_in_hole/peg_in_hole_v1 -maxdepth 2 -type f | head
+find ./checkpoints/pi05_am_bench_press_button/press_button_v1 -maxdepth 2 -type f | head
 ```
 
 Things to watch:
@@ -148,7 +148,7 @@ If this step fails early:
 
 - confirm Step 1 created `~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch/model.safetensors`
 - confirm Step 3 created the norm stats file
-- confirm the LeRobot dataset exists at `~/.cache/huggingface/lerobot/am_bench/peg_in_hole`
+- confirm the LeRobot dataset exists at `~/.cache/huggingface/lerobot/am_bench/press_button`
 
 ### Where To Change Training Parameters
 
@@ -158,7 +158,7 @@ For this pipeline, most training changes should go in:
 
 The main block to edit is the `TrainConfig(...)` with:
 
-- `name="pi05_am_bench_peg_in_hole"`
+- `name="pi05_am_bench_press_button"`
 
 Useful fields in that block:
 
@@ -201,11 +201,11 @@ Some practical examples:
 Once training has written a checkpoint directory for a specific step, serve it with (Default port is `8000`):
 
 ```bash
-./am_bench_scripts/serve.sh peg_in_hole_v1 1000
+./am_bench_scripts/serve.sh press_button_v1 1000
 ```
 
 This expects the checkpoint at,
 
 ```bash
-./checkpoints/pi05_am_bench_peg_in_hole/peg_in_hole_v1/1000
+./checkpoints/pi05_am_bench_press_button/press_button_v1/1000
 ```

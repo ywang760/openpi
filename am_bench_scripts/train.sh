@@ -5,10 +5,11 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 OPENPI_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 
 # Training config selection.
-CONFIG_NAME="pi05_am_bench_peg_in_hole"
+CONFIG_NAME="pi05_am_bench_press_button"
 
 # Hardware / launch.
-NUM_GPUS="4"
+CUDA_DEVICE="3"
+NUM_GPUS="1"
 
 # Common training overrides.
 BATCH_SIZE="32"
@@ -32,6 +33,7 @@ EXP_NAME="$1"
 cd "${OPENPI_ROOT}"
 
 CMD=(
+    env CUDA_VISIBLE_DEVICES="${CUDA_DEVICE}"
     uv run torchrun --standalone --nnodes=1 --nproc_per_node="${NUM_GPUS}"
     scripts/train_pytorch.py "${CONFIG_NAME}"
     --exp_name "${EXP_NAME}"

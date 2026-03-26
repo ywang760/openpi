@@ -4,9 +4,9 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 OPENPI_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 
-INPUT_DIR="/path/to/raw/peg_in_hole_hdf5"
-REPO_ID="am_bench/peg_in_hole"
-TASK_PROMPT="insert the peg into the hole"
+INPUT_DIR="/usr0/yutongw3/Desktop/am_isaac/datasets/PressButtonEERelPID/demo-20260128_021613"
+REPO_ID="am_bench/press_button"
+TASK_PROMPT="press the button"
 FPS="120"
 
 cd "${OPENPI_ROOT}"

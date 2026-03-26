@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 OPENPI_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
-CONFIG_NAME="pi05_am_bench_peg_in_hole"
+CONFIG_NAME="pi05_am_bench_press_button"
 
 cd "${OPENPI_ROOT}"
 

@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 OPENPI_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 OUTPUT_PATH="${HOME}/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch"
-CONFIG_NAME="pi05_am_bench_peg_in_hole"
+CONFIG_NAME="pi05_am_bench_press_button"
 CHECKPOINT_DIR="gs://openpi-assets/checkpoints/pi05_base"
 
 echo "OPENPI_ROOT: ${OPENPI_ROOT}"
