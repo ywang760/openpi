@@ -62,11 +62,36 @@ def _load_episode(file_path: Path) -> dict[str, np.ndarray]:
     return data
 
 
-def main(input_dir: str, repo_id: str, task_prompt: str = "insert the peg into the hole", fps: int = 30) -> None:
+def _get_downsample_indices(num_steps: int, source_fps: int, target_fps: int) -> np.ndarray:
+    if source_fps <= 0:
+        raise ValueError(f"source_fps must be positive, got {source_fps}")
+    if target_fps <= 0:
+        raise ValueError(f"target_fps must be positive, got {target_fps}")
+    if target_fps > source_fps:
+        raise ValueError(f"target_fps ({target_fps}) cannot exceed source_fps ({source_fps})")
+    if source_fps % target_fps != 0:
+        raise ValueError(
+            f"target_fps ({target_fps}) must evenly divide source_fps ({source_fps}) for frame downsampling"
+        )
+
+    stride = source_fps // target_fps
+    return np.arange(0, num_steps, stride, dtype=np.int64)
+
+
+def main(
+    input_dir: str,
+    repo_id: str,
+    task_prompt: str = "insert the peg into the hole",
+    fps: int = 30,
+    source_fps: int | None = None,
+) -> None:
     input_path = Path(input_dir).expanduser().resolve()
     output_path = HF_LEROBOT_HOME / repo_id
     if output_path.exists():
         shutil.rmtree(output_path)
+
+    if source_fps is None:
+        source_fps = fps
 
     episode_files = _find_episode_files(input_path)
     sample = _load_episode(episode_files[0])
@@ -116,7 +141,8 @@ def main(input_dir: str, repo_id: str, task_prompt: str = "insert the peg into t
     for episode_file in episode_files:
         episode = _load_episode(episode_file)
         num_steps = episode["ee_pos"].shape[0]
-        for step_idx in range(num_steps):
+        downsample_indices = _get_downsample_indices(num_steps, source_fps, fps)
+        for step_idx in downsample_indices:
             dataset.add_frame(
                 {
                     "ee_image": episode["ee_image"][step_idx],

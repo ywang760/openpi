@@ -8,7 +8,7 @@ OPENPI_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 CONFIG_NAME="pi05_am_bench_press_button"
 
 # Hardware / launch.
-CUDA_DEVICE="3"
+CUDA_DEVICE="0"
 NUM_GPUS="1"
 
 # Common training overrides.

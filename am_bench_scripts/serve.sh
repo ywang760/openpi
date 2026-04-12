@@ -8,7 +8,7 @@ CONFIG_NAME="pi05_am_bench_press_button"
 PORT="8000"
 CUDA_DEVICE=1
 
-EXP_NAME="pressbutton_1"
+EXP_NAME="pressbutton_2"
 STEP=20000
 CHECKPOINT_DIR="${OPENPI_ROOT}/checkpoints/${CONFIG_NAME}/${EXP_NAME}/${STEP}"
 
