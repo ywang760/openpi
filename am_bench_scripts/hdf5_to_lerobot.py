@@ -1,4 +1,8 @@
-"""Convert raw AM Isaac HDF5 episodes into a LeRobot dataset for am_bench.
+"""Legacy HDF5 compatibility converter for OpenPI AM-Bench data.
+
+Prefer `scripts/data/export_lerobot_to_openpi.py` from the am_isaac repo for
+new experiments. The default AM-Bench recording path already writes canonical
+LeRobot datasets, so this script should only be used for older HDF5 sessions.
 
 This script expects single-task AM Isaac episode files with:
 - `obs/ee_pos`
@@ -7,18 +11,58 @@ This script expects single-task AM Isaac episode files with:
 - `actions`
 - `images/ee_camera`
 - optional `images/base_camera`
+
+When `source_fps` is higher than `fps`, 7D EE delta actions are composed
+over each raw downsampling window instead of simply subsampled.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 import shutil
+import sys
 
 import h5py
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import numpy as np
 import tyro
+
+
+def _load_am_isaac_resampling():
+    repo_root = Path(__file__).resolve().parents[3]
+    for source_path in (
+        repo_root / "source" / "am_isaac_il",
+        repo_root / "source" / "am_isaac",
+    ):
+        if source_path.is_dir() and str(source_path) not in sys.path:
+            sys.path.insert(0, str(source_path))
+
+    try:
+        from am_isaac_il.processor.action_resampling import compose_delta_action_chunks
+        from am_isaac_il.processor.action_resampling import compute_stride
+    except ImportError as exc:
+        raise RuntimeError(
+            "Could not import am_isaac_il.processor.action_resampling. Run this "
+            "converter from the am_isaac checkout with source/am_isaac and "
+            "source/am_isaac_il importable, or install those packages into the "
+            "OpenPI environment."
+        ) from exc
+
+    return compose_delta_action_chunks, compute_stride
+
+
+def _compose_delta_action_chunks(actions: np.ndarray, stride: int) -> np.ndarray:
+    import torch
+
+    compose_delta_action_chunks, _ = _load_am_isaac_resampling()
+    action_tensor = torch.as_tensor(actions, dtype=torch.float32)
+    return (
+        compose_delta_action_chunks(action_tensor, stride)
+        .cpu()
+        .numpy()
+        .astype(np.float32, copy=False)
+    )
 
 
 def _find_episode_files(input_dir: Path) -> list[Path]:
@@ -47,7 +91,9 @@ def _load_episode(file_path: Path) -> dict[str, np.ndarray]:
         }
 
         if data["actions"].shape[-1] != 7:
-            raise ValueError(f"Expected relative 7D actions in {file_path}, got {data['actions'].shape}")
+            raise ValueError(
+                f"Expected relative 7D actions in {file_path}, got {data['actions'].shape}"
+            )
 
         if "base_camera" in episode["images"]:
             data["base_image"] = episode["images"]["base_camera"][()].astype(np.uint8)
@@ -57,25 +103,28 @@ def _load_episode(file_path: Path) -> dict[str, np.ndarray]:
     num_steps = data["ee_pos"].shape[0]
     for key in ("ee_image", "base_image", "ee_quat", "gripper_width", "actions"):
         if data[key].shape[0] != num_steps:
-            raise ValueError(f"Mismatched episode length for {key} in {file_path}: expected {num_steps}, got {data[key].shape[0]}")
+            raise ValueError(
+                f"Mismatched episode length for {key} in {file_path}: expected {num_steps}, "
+                f"got {data[key].shape[0]}"
+            )
 
     return data
 
 
-def _get_downsample_indices(num_steps: int, source_fps: int, target_fps: int) -> np.ndarray:
-    if source_fps <= 0:
-        raise ValueError(f"source_fps must be positive, got {source_fps}")
-    if target_fps <= 0:
-        raise ValueError(f"target_fps must be positive, got {target_fps}")
-    if target_fps > source_fps:
-        raise ValueError(f"target_fps ({target_fps}) cannot exceed source_fps ({source_fps})")
-    if source_fps % target_fps != 0:
-        raise ValueError(
-            f"target_fps ({target_fps}) must evenly divide source_fps ({source_fps}) for frame downsampling"
-        )
+def _get_downsample_stride(source_fps: int, target_fps: int) -> int:
+    _, compute_stride = _load_am_isaac_resampling()
+    return compute_stride(source_fps, target_fps)
 
-    stride = source_fps // target_fps
-    return np.arange(0, num_steps, stride, dtype=np.int64)
+
+def _get_downsample_indices(num_steps: int, source_fps: int, target_fps: int) -> np.ndarray:
+    stride = _get_downsample_stride(source_fps, target_fps)
+    num_full_windows = num_steps // stride
+    if num_full_windows < 1:
+        raise ValueError(
+            f"Episode has {num_steps} steps, which is shorter than one "
+            f"downsample window of {stride} raw steps."
+        )
+    return np.arange(0, num_full_windows * stride, stride, dtype=np.int64)
 
 
 def main(
@@ -86,12 +135,13 @@ def main(
     source_fps: int | None = None,
 ) -> None:
     input_path = Path(input_dir).expanduser().resolve()
+    if source_fps is None:
+        source_fps = fps
+    stride = _get_downsample_stride(source_fps, fps)
+
     output_path = HF_LEROBOT_HOME / repo_id
     if output_path.exists():
         shutil.rmtree(output_path)
-
-    if source_fps is None:
-        source_fps = fps
 
     episode_files = _find_episode_files(input_path)
     sample = _load_episode(episode_files[0])
@@ -142,7 +192,9 @@ def main(
         episode = _load_episode(episode_file)
         num_steps = episode["ee_pos"].shape[0]
         downsample_indices = _get_downsample_indices(num_steps, source_fps, fps)
-        for step_idx in downsample_indices:
+        usable_steps = len(downsample_indices) * stride
+        actions = _compose_delta_action_chunks(episode["actions"][:usable_steps], stride)
+        for logical_idx, step_idx in enumerate(downsample_indices):
             dataset.add_frame(
                 {
                     "ee_image": episode["ee_image"][step_idx],
@@ -150,7 +202,7 @@ def main(
                     "ee_pos": episode["ee_pos"][step_idx],
                     "ee_quat": episode["ee_quat"][step_idx],
                     "gripper_width": episode["gripper_width"][step_idx],
-                    "actions": episode["actions"][step_idx],
+                    "actions": actions[logical_idx],
                     "task": task_prompt,
                 }
             )

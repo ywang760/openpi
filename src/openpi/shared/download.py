@@ -129,14 +129,60 @@ def _download_fsspec(url: str, local_path: pathlib.Path, **kwargs) -> None:
         total_size = fs.du(url)
     else:
         total_size = info["size"]
+    try:
+        with tqdm.tqdm(total=total_size, unit="iB", unit_scale=True, unit_divisor=1024) as pbar:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(fs.get, url, local_path, recursive=is_dir)
+                while not future.done():
+                    current_size = sum(f.stat().st_size for f in [*local_path.rglob("*"), local_path] if f.is_file())
+                    pbar.update(current_size - pbar.n)
+                    time.sleep(1)
+                future.result()
+            pbar.update(total_size - pbar.n)
+    except TypeError as e:
+        # Old gcsfs is not compatible with newer fsspec callbacks: fs.get forwards the callback object as a query
+        # parameter and fails inside aiohttp/yarl. fs.open still works, so keep the cache path functional without
+        # changing the user's environment.
+        if "NoOpCallback" not in str(e):
+            raise
+        logger.warning("fsspec fs.get failed with the old gcsfs callback path; retrying with streaming reads.")
+        if local_path.exists():
+            if local_path.is_dir():
+                shutil.rmtree(local_path)
+            else:
+                local_path.unlink()
+        _download_fsspec_streaming(fs, url, local_path, is_dir=is_dir, total_size=total_size)
+
+
+def _download_fsspec_streaming(fs, url: str, local_path: pathlib.Path, *, is_dir: bool, total_size: int) -> None:
+    """Download through fs.open for filesystems where fs.get is broken."""
     with tqdm.tqdm(total=total_size, unit="iB", unit_scale=True, unit_divisor=1024) as pbar:
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(fs.get, url, local_path, recursive=is_dir)
-        while not future.done():
-            current_size = sum(f.stat().st_size for f in [*local_path.rglob("*"), local_path] if f.is_file())
-            pbar.update(current_size - pbar.n)
-            time.sleep(1)
-        pbar.update(total_size - pbar.n)
+        if not is_dir:
+            _copy_fsspec_file(fs, url, local_path, pbar)
+            return
+
+        local_path.mkdir(parents=True, exist_ok=True)
+        root = _strip_fsspec_protocol(fs, url).rstrip("/")
+        for source in fs.find(url):
+            if fs.info(source)["type"] == "directory":
+                continue
+            stripped_source = _strip_fsspec_protocol(fs, source)
+            relative_path = pathlib.PurePosixPath(stripped_source).relative_to(root)
+            _copy_fsspec_file(fs, source, local_path / pathlib.Path(*relative_path.parts), pbar)
+
+
+def _copy_fsspec_file(fs, source: str, destination: pathlib.Path, pbar) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with fs.open(source, "rb") as src, destination.open("wb") as dst:
+        while chunk := src.read(16 * 1024 * 1024):
+            dst.write(chunk)
+            pbar.update(len(chunk))
+
+
+def _strip_fsspec_protocol(fs, path: str) -> str:
+    if hasattr(fs, "_strip_protocol"):
+        return fs._strip_protocol(path)
+    return path
 
 
 def _set_permission(path: pathlib.Path, target_permission: int):

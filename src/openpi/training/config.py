@@ -360,21 +360,24 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
 class LeRobotAmBenchDataConfig(DataConfigFactory):
     """DataConfig for fine-tuning and serving am_bench policies from LeRobot data."""
 
+    include_base_image: bool = True
+
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        repack_structure = {
+            "am_bench/ee_pos": "ee_pos",
+            "am_bench/ee_quat": "ee_quat",
+            "am_bench/gripper_width": "gripper_width",
+            "am_bench/ee_image": "ee_image",
+            "actions": "actions",
+            "prompt": "prompt",
+        }
+        if self.include_base_image:
+            repack_structure["am_bench/base_image"] = "base_image"
+
         repack_transform = _transforms.Group(
             inputs=[
-                _transforms.RepackTransform(
-                    {
-                        "am_bench/ee_pos": "ee_pos",
-                        "am_bench/ee_quat": "ee_quat",
-                        "am_bench/gripper_width": "gripper_width",
-                        "am_bench/ee_image": "ee_image",
-                        "am_bench/base_image": "base_image",
-                        "actions": "actions",
-                        "prompt": "prompt",
-                    }
-                )
+                _transforms.RepackTransform(repack_structure)
             ]
         )
         data_transforms = _transforms.Group(
@@ -798,10 +801,84 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi05_am_bench_press_button",
-        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10),
         data=LeRobotAmBenchDataConfig(
             repo_id="am_bench/press_button",
             base_config=DataConfig(prompt_from_task=True),
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        pytorch_weight_path=str(pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()),
+        num_train_steps=20_000,
+    ),
+    TrainConfig(
+        name="pi05_am_bench_press_button_dp_aligned",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=16),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/press_button_dp_aligned",
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        pytorch_weight_path=str(pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()),
+        num_train_steps=20_000,
+    ),
+    TrainConfig(
+        name="pi05_am_bench_push_slider_dp_aligned",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=16),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/push_slider_dp_aligned",
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        pytorch_weight_path=str(pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()),
+        num_train_steps=20_000,
+    ),
+    TrainConfig(
+        name="pi05_am_bench_peg_in_hole",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/peg_in_hole",
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        pytorch_weight_path=str(pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()),
+        num_train_steps=20_000,
+    ),
+    TrainConfig(
+        name="pi05_am_bench_peg_in_hole_dp_aligned",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=16),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/peg_in_hole_dp_aligned",
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        pytorch_weight_path=str(pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()),
+        num_train_steps=20_000,
+    ),
+    TrainConfig(
+        name="pi05_am_bench_multitask",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/multitask",
+            base_config=DataConfig(prompt_from_task=True),
+            include_base_image=False,
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        pytorch_weight_path=str(pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()),
+        num_train_steps=20_000,
+    ),
+    TrainConfig(
+        name="pi05_am_bench_multitask_dp_aligned",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=16),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/multitask_dp_aligned",
+            base_config=DataConfig(prompt_from_task=True),
+            include_base_image=False,
         ),
         batch_size=32,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),

@@ -10,14 +10,22 @@ This is the current step-by-step path for launching the first `pi-0.5` PyTorch f
 - `ext/openpi/src/openpi/training/config.py`
   - defines `LeRobotAmBenchDataConfig`
   - defines `pi05_am_bench_press_button`
+- `scripts/data/export_lerobot_to_openpi.py` in the `am_isaac` repo
+  - current LeRobot v3 export path for canonical recordings
+  - exports one or more `session_root/lerobot` datasets into OpenPI's AM-Bench schema
+- `ext/openpi/am_bench_scripts/direct_lerobot_to_legacy.py`
+  - preferred path for current canonical LeRobot recordings when training with this OpenPI fork
+  - reads canonical LeRobot parquet directly, applies AM-Bench delta-action resampling, and writes OpenPI's pinned legacy LeRobot layout
+- `ext/openpi/am_bench_scripts/v3_lerobot_to_legacy.py`
+  - rewrites the current LeRobot v3 export into the older LeRobot layout pinned by this OpenPI fork
 - `ext/openpi/am_bench_scripts/hdf5_to_lerobot.py`
-  - converts raw AM Isaac HDF5 episodes into LeRobot format
+  - legacy compatibility path for older raw AM Isaac HDF5 episodes
 
 ### Shell
 - `ext/openpi/am_bench_scripts/prepare_pi05_base_pytorch.sh`
   - patches `transformers` inside the local `uv` environment and converts the base JAX checkpoint to PyTorch
 - `ext/openpi/am_bench_scripts/convert_dataset.sh`
-  - converts raw AM Isaac HDF5 episodes into a LeRobot dataset under `~/.cache/huggingface/lerobot`
+  - legacy wrapper for converting older raw AM Isaac HDF5 episodes
 - `ext/openpi/am_bench_scripts/compute_norm_stats.sh`
   - computes norm stats for the default `pi05_am_bench_press_button` config
 - `ext/openpi/am_bench_scripts/train.sh`
@@ -46,9 +54,94 @@ Expected output path:
 ~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch
 ```
 
-## Step 2: Convert Raw HDF5 Data To LeRobot
+## Step 2: Export Canonical LeRobot Data For OpenPI
 
-For the first run, keep the default repo ID. Do not change it unless you also update the training config.
+For current AM-Bench recordings, use the direct canonical LeRobot to legacy OpenPI export. This avoids writing an intermediate LeRobot v3 OpenPI-schema dataset and then rewriting it again for this OpenPI fork.
+
+Example:
+
+```bash
+cd /path/to/am_isaac/ext/openpi
+uv run am_bench_scripts/direct_lerobot_to_legacy.py \
+  --dataset_roots /path/to/am_isaac/datasets/PressButtonEEDeltaPID/demo-YYYYMMDD_HHMMSS/lerobot \
+  --repo_id am_bench/press_button \
+  --target_hz 30 \
+  --task_prompt_map /path/to/am_isaac/scripts/data/am_bench_language_instructions.json \
+  --require_task_prompt_map \
+  --omit_base_image \
+  --overwrite
+```
+
+For multi-task fine-tuning, pass multiple canonical dataset roots to `--dataset_roots`.
+
+Example multi-task input:
+
+```bash
+uv run am_bench_scripts/direct_lerobot_to_legacy.py \
+  --dataset_roots \
+    /path/to/am_isaac/datasets/OpenDoorEEDeltaPID/demo-YYYYMMDD_HHMMSS/lerobot \
+    /path/to/am_isaac/datasets/PullLeverEEDeltaPID/demo-YYYYMMDD_HHMMSS/lerobot \
+  --repo_id am_bench/multitask \
+  --target_hz 30 \
+  --task_prompt_map /path/to/am_isaac/scripts/data/am_bench_language_instructions.json \
+  --require_task_prompt_map \
+  --omit_base_image \
+  --overwrite
+```
+
+## Legacy: Current LeRobot V3 Bridge
+
+The two-step current-LeRobot bridge still exists for debugging, but it is slower because images are written once into the v3 export and then decoded/re-written into the legacy OpenPI layout.
+
+Example:
+
+```bash
+cd /path/to/am_isaac
+source ../IsaacLab/env_isaaclab/bin/activate
+python scripts/data/export_lerobot_to_openpi.py \
+  --dataset_roots datasets/PressButtonEEDeltaPID/demo-YYYYMMDD_HHMMSS/lerobot \
+  --repo_id am_bench/press_button_v3 \
+  --output_root /tmp/am_bench_press_button_v3 \
+  --target_hz 30 \
+  --overwrite
+```
+
+For multi-task fine-tuning, pass multiple canonical dataset roots to `--dataset_roots`; per-frame task prompts are preserved unless `--task_prompt` is set.
+
+Example multi-task input:
+
+```bash
+python scripts/data/export_lerobot_to_openpi.py \
+  --dataset_roots \
+    datasets/OpenDoorEEDeltaPID/demo-YYYYMMDD_HHMMSS/lerobot \
+    datasets/PullLeverEEDeltaPID/demo-YYYYMMDD_HHMMSS/lerobot \
+  --repo_id am_bench/multitask_v3 \
+  --output_root /tmp/am_bench_multitask_v3 \
+  --target_hz 30 \
+  --overwrite
+```
+
+Then bridge to OpenPI's pinned LeRobot layout:
+
+This OpenPI fork is pinned to an older LeRobot API that expects JSONL metadata and one parquet file per episode. Convert the v3 export before running norm stats or training:
+
+```bash
+cd /path/to/am_isaac/ext/openpi
+uv run am_bench_scripts/v3_lerobot_to_legacy.py \
+  --input_root /tmp/am_bench_press_button_v3 \
+  --repo_id am_bench/press_button \
+  --overwrite
+```
+
+Default bridged dataset:
+
+```bash
+~/.cache/huggingface/lerobot/am_bench/press_button
+```
+
+## Legacy: Convert Raw HDF5 Data To LeRobot
+
+Use this only for older data sessions that were not recorded as canonical LeRobot datasets.
 
 Edit the variables at the top of `./am_bench_scripts/convert_dataset.sh`, then run:
 
