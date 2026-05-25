@@ -72,6 +72,48 @@ uv run am_bench_scripts/direct_lerobot_to_legacy.py \
   --overwrite
 ```
 
+Current OpenPI-original reproduction setting:
+
+- record canonical `EEAbs` datasets
+- export at `20 Hz`
+- train with action horizon `50`
+- evaluate with `n_action_steps=8`
+- use `--action_representation ee_relative` so training chunks are relative SE(3) targets derived from
+  absolute EE setpoints
+
+Example for the validated PressButton path:
+
+```bash
+cd /path/to/am_isaac/ext/openpi
+uv run am_bench_scripts/direct_lerobot_to_legacy.py \
+  --dataset_roots /path/to/am_isaac/datasets/PressButtonEEAbsPID/demo-YYYYMMDD_HHMMSS/lerobot \
+  --repo_id am_bench/press_button_openpi_original_20hz_ee_relative \
+  --target_hz 20 \
+  --action_representation ee_relative \
+  --task_prompt_map /path/to/am_isaac/scripts/data/am_bench_language_instructions.json \
+  --require_task_prompt_map \
+  --omit_base_image \
+  --overwrite
+```
+
+Example for the prepared LemonHarvesting dataset:
+
+```bash
+cd /path/to/am_isaac/ext/openpi
+uv run am_bench_scripts/direct_lerobot_to_legacy.py \
+  --dataset_roots /path/to/am_isaac/datasets/LemonHarvestingEEAbsPID/demo-20260524_070724/lerobot \
+  --repo_id am_bench/lemon_harvesting_openpi_original_20hz_ee_relative \
+  --target_hz 20 \
+  --action_representation ee_relative \
+  --task_prompt_map /path/to/am_isaac/scripts/data/am_bench_language_instructions.json \
+  --require_task_prompt_map \
+  --omit_base_image \
+  --overwrite
+```
+
+The prepared LemonHarvesting export uses `stride=6` from the 120 Hz raw dataset, producing
+46 episodes / 13294 frames at 20 Hz.
+
 For multi-task fine-tuning, pass multiple canonical dataset roots to `--dataset_roots`.
 
 Example multi-task input:
@@ -192,6 +234,20 @@ Quick check:
 
 ```bash
 ls ./assets/pi05_am_bench_press_button/am_bench/press_button/norm_stats.json
+```
+
+For task-specific OpenPI-original configs, compute stats directly with the config name:
+
+```bash
+uv run scripts/compute_norm_stats.py \
+  --config-name pi05_am_bench_press_button_openpi_original_20hz_h50_ee_relative
+```
+
+For LemonHarvesting, use the matching config after the dataset is exported:
+
+```bash
+uv run scripts/compute_norm_stats.py \
+  --config-name pi05_am_bench_lemon_harvesting_openpi_original_20hz_h50_ee_relative
 ```
 
 ## Step 4: Launch Training

@@ -202,6 +202,7 @@ def validate_source_info(
     base_image_key: str,
     state_key: str,
     action_key: str,
+    action_representation: str,
 ) -> None:
     features = info.get("features")
     if not isinstance(features, dict):
@@ -215,21 +216,37 @@ def validate_source_info(
     action_shape = tuple(features[action_key].get("shape", ()))
     if state_shape[0] < 8:
         raise ValueError(f"Expected {state_key} to start with 8D EE state. Got shape {state_shape}.")
-    if action_shape != (7,):
-        raise ValueError(f"Expected 7D EE delta actions in {action_key}. Got shape {action_shape}.")
 
     action_semantics = info.get("am_isaac", {}).get("action_semantics")
-    if action_semantics not in (None, "ee_delta"):
-        raise ValueError(
-            f"Direct OpenPI export expects ee_delta source actions. "
-            f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
-        )
+    if action_representation == "delta":
+        if action_shape != (7,):
+            raise ValueError(f"Expected 7D EE delta actions in {action_key}. Got shape {action_shape}.")
+        if action_semantics not in (None, "ee_delta"):
+            raise ValueError(
+                f"Direct OpenPI delta export expects ee_delta source actions. "
+                f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
+            )
+    elif action_representation == "ee_relative":
+        if action_shape != (8,):
+            raise ValueError(f"Expected 8D EE absolute actions in {action_key}. Got shape {action_shape}.")
+        if action_semantics != "ee_absolute":
+            raise ValueError(
+                f"Direct OpenPI ee_relative export expects ee_absolute source actions. "
+                f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
+            )
+    else:
+        raise ValueError(f"Unsupported action representation: {action_representation}")
 
     if base_image_key not in features:
         print(f"Source dataset has no {base_image_key}; base_image will be omitted or zero-filled.")
 
 
-def legacy_features(sample_shape: tuple[int, int, int], include_base_image: bool) -> dict[str, dict[str, Any]]:
+def legacy_features(
+    sample_shape: tuple[int, int, int],
+    include_base_image: bool,
+    *,
+    action_dim: int,
+) -> dict[str, dict[str, Any]]:
     features: dict[str, dict[str, Any]] = {
         "ee_image": {
             "dtype": "image",
@@ -253,7 +270,7 @@ def legacy_features(sample_shape: tuple[int, int, int], include_base_image: bool
         },
         "actions": {
             "dtype": "float32",
-            "shape": (7,),
+            "shape": (action_dim,),
             "names": ["actions"],
         },
     }
@@ -325,13 +342,14 @@ def create_dataset(
     include_base_image: bool,
     image_writer_threads: int,
     image_writer_processes: int,
+    action_dim: int,
 ) -> LeRobotDataset:
     return LeRobotDataset.create(
         repo_id=repo_id,
         root=output_root,
         robot_type="am_bench",
         fps=target_hz,
-        features=legacy_features(image_shape, include_base_image),
+        features=legacy_features(image_shape, include_base_image, action_dim=action_dim),
         use_videos=False,
         image_writer_threads=image_writer_threads,
         image_writer_processes=image_writer_processes,
@@ -356,6 +374,7 @@ def export_episode(
     prompt_map: dict[str, str],
     require_prompt_map: bool,
     zero_base_image: np.ndarray | None,
+    action_representation: str,
 ) -> int:
     columns = [state_key, action_key, ee_image_key, "task_index"]
     has_base_image = base_image_key in info["features"]
@@ -368,7 +387,12 @@ def export_episode(
         return 0
 
     actions = np.asarray([row[action_key] for row in rows[:usable_raw_steps]], dtype=np.float32)
-    composed_actions = compose_delta_action_chunks(actions, stride)
+    if action_representation == "delta":
+        exported_actions = compose_delta_action_chunks(actions, stride)
+    elif action_representation == "ee_relative":
+        exported_actions = actions[::stride][: usable_raw_steps // stride].astype(np.float32, copy=False)
+    else:
+        raise ValueError(f"Unsupported action representation: {action_representation}")
     prompt_cache: dict[int, str] = {}
 
     for logical_index, raw_index in enumerate(range(0, usable_raw_steps, stride)):
@@ -392,7 +416,7 @@ def export_episode(
             "ee_pos": state[0:3],
             "ee_quat": state[3:7],
             "gripper_width": state[7:8],
-            "actions": composed_actions[logical_index],
+            "actions": exported_actions[logical_index],
             "task": prompt_cache[task_index],
         }
         if include_base_image:
@@ -424,6 +448,7 @@ def export_datasets(
     max_episodes_per_source: int | None,
     image_writer_threads: int,
     image_writer_processes: int,
+    action_representation: str,
 ) -> Path:
     output_root = (output_root or (HF_LEROBOT_HOME / repo_id)).expanduser().resolve()
     if output_root.exists():
@@ -441,15 +466,20 @@ def export_datasets(
             base_image_key=base_image_key,
             state_key=state_key,
             action_key=action_key,
+            action_representation=action_representation,
         )
 
     image_shape = tuple(source_infos[0]["features"][ee_image_key]["shape"])
     if len(image_shape) != 3:
         raise ValueError(f"Expected 3D image shape for {ee_image_key}, got {image_shape}.")
+    action_dim = int(source_infos[0]["features"][action_key]["shape"][0])
     for root, info in zip(resolved_roots[1:], source_infos[1:], strict=True):
         root_shape = tuple(info["features"][ee_image_key]["shape"])
         if root_shape != image_shape:
             raise ValueError(f"Image shape mismatch: {root} has {root_shape}, expected {image_shape}.")
+        root_action_dim = int(info["features"][action_key]["shape"][0])
+        if root_action_dim != action_dim:
+            raise ValueError(f"Action dim mismatch: {root} has {root_action_dim}, expected {action_dim}.")
 
     dataset = create_dataset(
         repo_id=repo_id,
@@ -459,6 +489,7 @@ def export_datasets(
         include_base_image=include_base_image,
         image_writer_threads=image_writer_threads,
         image_writer_processes=image_writer_processes,
+        action_dim=action_dim,
     )
 
     export_report: dict[str, Any] = {
@@ -466,6 +497,8 @@ def export_datasets(
         "output_root": str(output_root),
         "target_hz": target_hz,
         "include_base_image": include_base_image,
+        "action_representation": action_representation,
+        "action_dim": action_dim,
         "sources": [],
     }
 
@@ -499,6 +532,7 @@ def export_datasets(
                     prompt_map=task_prompt_map,
                     require_prompt_map=require_task_prompt_map,
                     zero_base_image=zero_base_image,
+                    action_representation=action_representation,
                 )
                 source_frames += written_frames
                 total_frames += written_frames
@@ -558,6 +592,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not write base_image. Use this for current EE-camera-only AM-Bench datasets.",
     )
+    parser.add_argument(
+        "--action_representation",
+        type=str,
+        default="delta",
+        choices=("delta", "ee_relative"),
+        help=(
+            "Policy action representation to prepare. 'delta' expects 7D ee_delta source actions and "
+            "composes them over --target_hz strides. 'ee_relative' expects 8D ee_absolute source actions "
+            "and keeps absolute setpoints for quaternion-safe relative transforms during OpenPI training."
+        ),
+    )
     parser.add_argument("--task_prompt", type=str, default="")
     parser.add_argument("--task_prompt_map", type=Path, default=None)
     parser.add_argument("--require_task_prompt_map", action="store_true")
@@ -598,6 +643,7 @@ def main() -> None:
         max_episodes_per_source=args.max_episodes_per_source,
         image_writer_threads=args.image_writer_threads,
         image_writer_processes=args.image_writer_processes,
+        action_representation=args.action_representation,
     )
     print(f"Wrote OpenPI legacy LeRobot dataset to {output_root}")
 
