@@ -67,10 +67,7 @@ def compute_stride(raw_fps: int, target_fps: int) -> int:
     if raw_fps < 1:
         raise ValueError(f"Source dataset fps must be >= 1. Got {raw_fps}.")
     if raw_fps % target_fps != 0:
-        raise ValueError(
-            "Only integer downsampling is supported. "
-            f"Got source fps={raw_fps}, target_hz={target_fps}."
-        )
+        raise ValueError(f"Only integer downsampling is supported. Got source fps={raw_fps}, target_hz={target_fps}.")
     return raw_fps // target_fps
 
 
@@ -226,12 +223,12 @@ def validate_source_info(
                 f"Direct OpenPI delta export expects ee_delta source actions. "
                 f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
             )
-    elif action_representation == "ee_relative":
+    elif action_representation in ("ee_relative", "ee_local_relative"):
         if action_shape != (8,):
             raise ValueError(f"Expected 8D EE absolute actions in {action_key}. Got shape {action_shape}.")
         if action_semantics != "ee_absolute":
             raise ValueError(
-                f"Direct OpenPI ee_relative export expects ee_absolute source actions. "
+                f"Direct OpenPI {action_representation} export expects ee_absolute source actions. "
                 f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
             )
     else:
@@ -323,13 +320,23 @@ def selected_episode_rows(
     columns: list[str],
 ) -> list[dict[str, Any]]:
     file_path = source_data_file(dataset_root, info, episode)
-    rows = pq.read_table(file_path, columns=columns).to_pylist()
     expected_length = int(episode["dataset_to_index"]) - int(episode["dataset_from_index"])
+    episode_index = int(episode["episode_index"])
+
+    read_columns = list(dict.fromkeys([*columns, "episode_index"]))
+    rows = pq.read_table(file_path, columns=read_columns).to_pylist()
+    if len(rows) != expected_length:
+        rows = [row for row in rows if int(row["episode_index"]) == episode_index]
+
     if len(rows) != expected_length:
         raise ValueError(
-            f"Unexpected row count in {file_path}: expected {expected_length}, got {len(rows)}. "
-            "This direct exporter assumes one source data file per episode."
+            f"Unexpected row count in {file_path} for episode {episode_index}: "
+            f"expected {expected_length}, got {len(rows)} after filtering by episode_index."
         )
+
+    if "episode_index" not in columns:
+        for row in rows:
+            row.pop("episode_index", None)
     return rows
 
 
@@ -389,7 +396,7 @@ def export_episode(
     actions = np.asarray([row[action_key] for row in rows[:usable_raw_steps]], dtype=np.float32)
     if action_representation == "delta":
         exported_actions = compose_delta_action_chunks(actions, stride)
-    elif action_representation == "ee_relative":
+    elif action_representation in ("ee_relative", "ee_local_relative"):
         exported_actions = actions[::stride][: usable_raw_steps // stride].astype(np.float32, copy=False)
     else:
         raise ValueError(f"Unsupported action representation: {action_representation}")
@@ -538,8 +545,7 @@ def export_datasets(
                 total_frames += written_frames
                 if dataset.meta.total_episodes % 10 == 0:
                     print(
-                        f"progress: {dataset.meta.total_episodes} episodes, "
-                        f"{dataset.meta.total_frames} frames written"
+                        f"progress: {dataset.meta.total_episodes} episodes, {dataset.meta.total_frames} frames written"
                     )
 
             source_tasks = sorted(set(tasks.values()))
@@ -596,11 +602,12 @@ def parse_args() -> argparse.Namespace:
         "--action_representation",
         type=str,
         default="delta",
-        choices=("delta", "ee_relative"),
+        choices=("delta", "ee_relative", "ee_local_relative"),
         help=(
             "Policy action representation to prepare. 'delta' expects 7D ee_delta source actions and "
-            "composes them over --target_hz strides. 'ee_relative' expects 8D ee_absolute source actions "
-            "and keeps absolute setpoints for quaternion-safe relative transforms during OpenPI training."
+            "composes them over --target_hz strides. 'ee_relative' and 'ee_local_relative' expect 8D "
+            "ee_absolute source actions and keep absolute setpoints for quaternion-safe relative transforms "
+            "during OpenPI training."
         ),
     )
     parser.add_argument("--task_prompt", type=str, default="")
