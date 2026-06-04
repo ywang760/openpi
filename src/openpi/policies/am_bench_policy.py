@@ -23,6 +23,9 @@ def make_am_bench_example(*, image_hw: int = 224) -> dict:
     return {
         "am_bench/ee_pos": np.zeros((3,), dtype=np.float32),
         "am_bench/ee_quat": np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
+        "am_bench/base_pos": np.zeros((3,), dtype=np.float32),
+        "am_bench/base_quat": np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
+        "am_bench/arm_joint_pos": np.zeros((4,), dtype=np.float32),
         "am_bench/gripper_width": np.zeros((1,), dtype=np.float32),
         "am_bench/ee_image": np.random.randint(256, size=(image_hw, image_hw, 3), dtype=np.uint8),
         "prompt": "press the button",
@@ -114,6 +117,19 @@ def _validate_ee_absolute_inputs(actions: np.ndarray, state: np.ndarray, action_
         raise ValueError(f"{action_representation} requires 8D absolute EE actions. Got action shape {actions.shape}.")
 
 
+def _validate_base_joint_absolute_inputs(
+    actions: np.ndarray,
+    state: np.ndarray,
+    action_representation: str,
+) -> None:
+    if state.shape[-1] < 12:
+        raise ValueError(f"{action_representation} requires a 12D state prefix. Got state shape {state.shape}.")
+    if actions.shape[-1] < 12:
+        raise ValueError(
+            f"{action_representation} requires 12D absolute Base+joints actions. Got action shape {actions.shape}."
+        )
+
+
 def _to_se_relative(actions: np.ndarray, state: np.ndarray) -> np.ndarray:
     actions = np.asarray(actions, dtype=np.float32)
     state = np.asarray(state, dtype=np.float32)
@@ -144,6 +160,43 @@ def _to_se_absolute(actions: np.ndarray, state: np.ndarray) -> np.ndarray:
         state_quat,
     )
     absolute[..., 7:8] = actions[..., 7:8]
+    return absolute.astype(np.float32, copy=False)
+
+
+def _to_base_joint_relative(actions: np.ndarray, state: np.ndarray) -> np.ndarray:
+    actions = np.asarray(actions, dtype=np.float32)
+    state = np.asarray(state, dtype=np.float32)
+    _validate_base_joint_absolute_inputs(actions, state, "base_joint_relative")
+
+    state_view = _broadcast_state(state[..., :12], actions.ndim)
+    relative = actions[..., :12].copy()
+    relative[..., 0:3] -= state_view[..., 0:3]
+    state_quat = _normalize_quat(state_view[..., 3:7])
+    action_quat = _canonicalize_quat_sign(_normalize_quat(relative[..., 3:7]), state_quat)
+    relative[..., 3:7] = _canonicalize_quat_sign(
+        _normalize_quat(_quat_mul(_quat_conjugate(state_quat), action_quat))
+    )
+    relative[..., 7:11] -= state_view[..., 7:11]
+    relative[..., 11:12] = actions[..., 11:12]
+    return relative.astype(np.float32, copy=False)
+
+
+def _to_base_joint_absolute(actions: np.ndarray, state: np.ndarray) -> np.ndarray:
+    actions = np.asarray(actions, dtype=np.float32)
+    state = np.asarray(state, dtype=np.float32)
+    _validate_base_joint_absolute_inputs(actions, state, "base_joint_relative")
+
+    state_view = _broadcast_state(state[..., :12], actions.ndim)
+    absolute = actions[..., :12].copy()
+    absolute[..., 0:3] += state_view[..., 0:3]
+    state_quat = _normalize_quat(state_view[..., 3:7])
+    relative_quat = _canonicalize_quat_sign(_normalize_quat(absolute[..., 3:7]))
+    absolute[..., 3:7] = _canonicalize_quat_sign(
+        _normalize_quat(_quat_mul(state_quat, relative_quat)),
+        state_quat,
+    )
+    absolute[..., 7:11] += state_view[..., 7:11]
+    absolute[..., 11:12] = actions[..., 11:12]
     return absolute.astype(np.float32, copy=False)
 
 
@@ -205,6 +258,19 @@ class EELocalRelativeCache:
         return self.anchor_state
 
 
+@dataclasses.dataclass
+class BaseJointRelativeCache:
+    anchor_state: np.ndarray | None = None
+
+    def set_anchor(self, state: np.ndarray) -> None:
+        self.anchor_state = np.asarray(state, dtype=np.float32).copy()
+
+    def get_anchor(self) -> np.ndarray:
+        if self.anchor_state is None:
+            raise RuntimeError("base_joint_relative output decode requires a cached absolute Base+joints anchor state.")
+        return self.anchor_state
+
+
 @dataclasses.dataclass(frozen=True)
 class AmBenchInputs(transforms.DataTransformFn):
     """Map am_bench observations into pi0/pi0.5 inputs.
@@ -212,6 +278,9 @@ class AmBenchInputs(transforms.DataTransformFn):
     Input schema (dict keys):
     - am_bench/ee_pos: (3,) float
     - am_bench/ee_quat: (4,) float quaternion in (w, x, y, z) order
+    - am_bench/base_pos: (3,) float, required for base_joint_relative
+    - am_bench/base_quat: (4,) float quaternion in (w, x, y, z) order, required for base_joint_relative
+    - am_bench/arm_joint_pos: (4,) float, required for base_joint_relative
     - am_bench/gripper_width: (1,) float
     - am_bench/ee_image: uint8 (H,W,3) or float (C,H,W) / (H,W,C)
     - am_bench/base_image: optional uint8 (H,W,3) or float (C,H,W) / (H,W,C)
@@ -221,6 +290,7 @@ class AmBenchInputs(transforms.DataTransformFn):
     - delta mode state: (7,) float = [eef_pos(3), eef_axis_angle(3), gripper_width(1)]
     - ee_relative mode state: (8,) float = [eef_pos(3), eef_quat(4), gripper_width(1)]
     - ee_local_relative mode state: (8,) float = [zero_pos(3), identity_quat(4), gripper_width(1)]
+    - base_joint_relative mode state: (12,) float = [base_pos(3), base_quat(4), arm_joint_pos(4), gripper_width(1)]
     - image: dict with OpenPI image keys
     - image_mask: dict with masks
     - prompt: str
@@ -229,27 +299,36 @@ class AmBenchInputs(transforms.DataTransformFn):
     model_type: _model.ModelType
     action_representation: str = "delta"
     ee_local_relative_cache: EELocalRelativeCache | None = None
+    base_joint_relative_cache: BaseJointRelativeCache | None = None
 
     def __call__(self, data: dict) -> dict:
         if self.model_type not in (_model.ModelType.PI0, _model.ModelType.PI05):
             raise ValueError(f"Unsupported model type for am_bench: {self.model_type}")
-        if self.action_representation not in ("delta", "ee_relative", "ee_local_relative"):
+        if self.action_representation not in ("delta", "ee_relative", "ee_local_relative", "base_joint_relative"):
             raise ValueError(f"Unsupported am_bench action representation: {self.action_representation}")
 
-        ee_pos = np.asarray(data["am_bench/ee_pos"], dtype=np.float32).reshape(3)
-        ee_quat = _normalize_quat(np.asarray(data["am_bench/ee_quat"], dtype=np.float32).reshape(4))
         gripper_width = np.asarray(data["am_bench/gripper_width"], dtype=np.float32).reshape(1)
-        if self.action_representation in ("ee_relative", "ee_local_relative"):
-            absolute_state = np.concatenate([ee_pos, ee_quat, gripper_width], axis=0).astype(np.float32)
-            if self.action_representation == "ee_local_relative":
-                if self.ee_local_relative_cache is not None:
-                    self.ee_local_relative_cache.set_anchor(absolute_state)
-                state = _localize_ee_state(absolute_state)
-            else:
-                state = absolute_state
+        if self.action_representation == "base_joint_relative":
+            base_pos = np.asarray(data["am_bench/base_pos"], dtype=np.float32).reshape(3)
+            base_quat = _normalize_quat(np.asarray(data["am_bench/base_quat"], dtype=np.float32).reshape(4))
+            arm_joint_pos = np.asarray(data["am_bench/arm_joint_pos"], dtype=np.float32).reshape(4)
+            state = np.concatenate([base_pos, base_quat, arm_joint_pos, gripper_width], axis=0).astype(np.float32)
+            if self.base_joint_relative_cache is not None:
+                self.base_joint_relative_cache.set_anchor(state)
         else:
-            ee_axis_angle = _quat_wxyz_to_axis_angle(ee_quat)
-            state = np.concatenate([ee_pos, ee_axis_angle, gripper_width], axis=0).astype(np.float32)
+            ee_pos = np.asarray(data["am_bench/ee_pos"], dtype=np.float32).reshape(3)
+            ee_quat = _normalize_quat(np.asarray(data["am_bench/ee_quat"], dtype=np.float32).reshape(4))
+            if self.action_representation in ("ee_relative", "ee_local_relative"):
+                absolute_state = np.concatenate([ee_pos, ee_quat, gripper_width], axis=0).astype(np.float32)
+                if self.action_representation == "ee_local_relative":
+                    if self.ee_local_relative_cache is not None:
+                        self.ee_local_relative_cache.set_anchor(absolute_state)
+                    state = _localize_ee_state(absolute_state)
+                else:
+                    state = absolute_state
+            else:
+                ee_axis_angle = _quat_wxyz_to_axis_angle(ee_quat)
+                state = np.concatenate([ee_pos, ee_axis_angle, gripper_width], axis=0).astype(np.float32)
 
         ee_image = _parse_image(data["am_bench/ee_image"])
         if "am_bench/base_image" in data:
@@ -279,6 +358,8 @@ class AmBenchInputs(transforms.DataTransformFn):
                 actions = _to_se_relative(actions, state)
             elif self.action_representation == "ee_local_relative":
                 actions = _to_ee_local_relative(actions, absolute_state)
+            elif self.action_representation == "base_joint_relative":
+                actions = _to_base_joint_relative(actions, state)
             inputs["actions"] = actions.astype(np.float32, copy=False)
 
         if "prompt" in data:
@@ -296,6 +377,7 @@ class AmBenchOutputs(transforms.DataTransformFn):
 
     action_representation: str = "delta"
     ee_local_relative_cache: EELocalRelativeCache | None = None
+    base_joint_relative_cache: BaseJointRelativeCache | None = None
 
     def __call__(self, data: dict) -> dict:
         actions = np.asarray(data["actions"])
@@ -305,6 +387,10 @@ class AmBenchOutputs(transforms.DataTransformFn):
             if self.ee_local_relative_cache is None:
                 raise RuntimeError("ee_local_relative output decode requires a shared input/output state cache.")
             return {"actions": _to_ee_local_absolute(actions, self.ee_local_relative_cache.get_anchor())}
+        if self.action_representation == "base_joint_relative":
+            if self.base_joint_relative_cache is None:
+                raise RuntimeError("base_joint_relative output decode requires a shared input/output state cache.")
+            return {"actions": _to_base_joint_absolute(actions, self.base_joint_relative_cache.get_anchor())}
         if self.action_representation != "delta":
             raise ValueError(f"Unsupported am_bench action representation: {self.action_representation}")
         return {"actions": actions[..., :7]}

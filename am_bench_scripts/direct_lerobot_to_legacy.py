@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import argparse
 import functools
+import importlib
 from io import BytesIO
 import json
 from pathlib import Path
 import shutil
+import sys
 from typing import Any
 
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
@@ -33,6 +35,16 @@ DEFAULT_BASE_IMAGE_KEY = "observation.images.base_camera"
 DEFAULT_STATE_KEY = "observation.state"
 DEFAULT_ACTION_KEY = "action"
 TASK_PROMPT_MAP_KEYS = ("task_prompts", "task_prompt_map", "prompts")
+EE_STATE_KEYS = ("ee_pos", "ee_quat", "gripper_width")
+BASE_JOINT_STATE_KEYS = ("base_pos", "base_quat", "arm_joint_pos", "gripper_width")
+STATE_KEY_DIMS = {
+    "ee_pos": 3,
+    "ee_quat": 4,
+    "base_pos": 3,
+    "base_quat": 4,
+    "arm_joint_pos": 4,
+    "gripper_width": 1,
+}
 
 
 def _repo_root() -> Path:
@@ -41,24 +53,24 @@ def _repo_root() -> Path:
 
 @functools.cache
 def _load_rotation_math():
-    import sys
-
     source_path = _repo_root() / "source" / "am_isaac_il"
     if source_path.is_dir() and str(source_path) not in sys.path:
         sys.path.insert(0, str(source_path))
 
     try:
-        from am_isaac_il.utils.rotation_math import normalize_quat
-        from am_isaac_il.utils.rotation_math import quat_mul
-        from am_isaac_il.utils.rotation_math import quat_to_rotvec
-        from am_isaac_il.utils.rotation_math import rotvec_to_quat
+        rotation_math = importlib.import_module("am_isaac_il.utils.rotation_math")
     except ImportError as exc:
         raise RuntimeError(
             "Could not import AM-Bench rotation utilities from source/am_isaac_il. "
             "Run this script from the am_isaac checkout or keep source/am_isaac_il available."
         ) from exc
 
-    return normalize_quat, quat_mul, quat_to_rotvec, rotvec_to_quat
+    return (
+        rotation_math.normalize_quat,
+        rotation_math.quat_mul,
+        rotation_math.quat_to_rotvec,
+        rotation_math.rotvec_to_quat,
+    )
 
 
 def compute_stride(raw_fps: int, target_fps: int) -> int:
@@ -119,6 +131,58 @@ def load_info(dataset_root: Path) -> dict[str, Any]:
     return load_json(dataset_root / "meta" / "info.json")
 
 
+def resolve_state_slices(info: dict[str, Any], state_key: str) -> dict[str, slice]:
+    state_shape = tuple(info["features"][state_key].get("shape", ()))
+    if not state_shape:
+        raise ValueError(f"Expected {state_key} to have a shape entry in source info.json.")
+
+    state_dim = int(state_shape[0])
+    am_isaac_info = info.get("am_isaac", {})
+    state_keys = am_isaac_info.get("state_keys") if isinstance(am_isaac_info, dict) else None
+
+    if isinstance(state_keys, list) and state_keys:
+        slices: dict[str, slice] = {}
+        offset = 0
+        for key in state_keys:
+            if not isinstance(key, str):
+                raise ValueError(f"Expected am_isaac.state_keys to contain strings. Got {state_keys!r}.")
+            if key not in STATE_KEY_DIMS:
+                raise ValueError(f"Unsupported AM-Bench state key {key!r} in source metadata.")
+            width = STATE_KEY_DIMS[key]
+            slices[key] = slice(offset, offset + width)
+            offset += width
+        if offset > state_dim:
+            raise ValueError(
+                f"am_isaac.state_keys describe {offset} state dims, but {state_key} only has shape {state_shape}."
+            )
+        return slices
+
+    if state_dim == 8:
+        return {
+            "ee_pos": slice(0, 3),
+            "ee_quat": slice(3, 7),
+            "gripper_width": slice(7, 8),
+        }
+    if state_dim == 12:
+        return {
+            "base_pos": slice(0, 3),
+            "base_quat": slice(3, 7),
+            "arm_joint_pos": slice(7, 11),
+            "gripper_width": slice(11, 12),
+        }
+
+    raise ValueError(
+        f"Could not infer state layout for {state_key} shape {state_shape}. "
+        "Expected am_isaac.state_keys metadata, 8D EE state, or 12D Base+joints state."
+    )
+
+
+def require_state_keys(state_slices: dict[str, slice], required_keys: tuple[str, ...], *, context: str) -> None:
+    missing = [key for key in required_keys if key not in state_slices]
+    if missing:
+        raise ValueError(f"{context} requires state keys {required_keys}, but metadata is missing {missing}.")
+
+
 def load_task_prompt_map(path: Path | None) -> dict[str, str]:
     if path is None:
         return {}
@@ -131,11 +195,11 @@ def load_task_prompt_map(path: Path | None) -> dict[str, str]:
             break
 
     prompts: dict[str, str] = {}
-    for source_task, prompt in raw.items():
-        if not isinstance(source_task, str) or not isinstance(prompt, str):
-            raise ValueError(f"Task prompt map entries must be string pairs. Got {source_task!r}: {prompt!r}.")
-        source_task = source_task.strip()
-        prompt = prompt.strip()
+    for source_task_raw, prompt_raw in raw.items():
+        if not isinstance(source_task_raw, str) or not isinstance(prompt_raw, str):
+            raise ValueError(f"Task prompt map entries must be string pairs. Got {source_task_raw!r}: {prompt_raw!r}.")
+        source_task = source_task_raw.strip()
+        prompt = prompt_raw.strip()
         if not source_task or not prompt:
             raise ValueError(f"Task prompt map contains an empty key or prompt: {path}")
         prompts[source_task] = prompt
@@ -211,11 +275,16 @@ def validate_source_info(
 
     state_shape = tuple(features[state_key].get("shape", ()))
     action_shape = tuple(features[action_key].get("shape", ()))
-    if state_shape[0] < 8:
-        raise ValueError(f"Expected {state_key} to start with 8D EE state. Got shape {state_shape}.")
+    if not state_shape:
+        raise ValueError(f"Expected {state_key} to have a vector shape. Got shape {state_shape}.")
 
     action_semantics = info.get("am_isaac", {}).get("action_semantics")
     if action_representation == "delta":
+        require_state_keys(
+            resolve_state_slices(info, state_key),
+            EE_STATE_KEYS,
+            context="Direct OpenPI delta export",
+        )
         if action_shape != (7,):
             raise ValueError(f"Expected 7D EE delta actions in {action_key}. Got shape {action_shape}.")
         if action_semantics not in (None, "ee_delta"):
@@ -224,11 +293,29 @@ def validate_source_info(
                 f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
             )
     elif action_representation in ("ee_relative", "ee_local_relative"):
+        require_state_keys(
+            resolve_state_slices(info, state_key),
+            EE_STATE_KEYS,
+            context=f"Direct OpenPI {action_representation} export",
+        )
         if action_shape != (8,):
             raise ValueError(f"Expected 8D EE absolute actions in {action_key}. Got shape {action_shape}.")
         if action_semantics != "ee_absolute":
             raise ValueError(
                 f"Direct OpenPI {action_representation} export expects ee_absolute source actions. "
+                f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
+            )
+    elif action_representation == "base_joint_relative":
+        require_state_keys(
+            resolve_state_slices(info, state_key),
+            BASE_JOINT_STATE_KEYS,
+            context="Direct OpenPI base_joint_relative export",
+        )
+        if action_shape != (12,):
+            raise ValueError(f"Expected 12D Base+joints absolute actions in {action_key}. Got shape {action_shape}.")
+        if action_semantics != "base_joint_absolute":
+            raise ValueError(
+                f"Direct OpenPI base_joint_relative export expects base_joint_absolute source actions. "
                 f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
             )
     else:
@@ -240,25 +327,16 @@ def validate_source_info(
 
 def legacy_features(
     sample_shape: tuple[int, int, int],
-    include_base_image: bool,
     *,
+    include_base_image: bool,
     action_dim: int,
+    action_representation: str,
 ) -> dict[str, dict[str, Any]]:
     features: dict[str, dict[str, Any]] = {
         "ee_image": {
             "dtype": "image",
             "shape": sample_shape,
             "names": ["height", "width", "channel"],
-        },
-        "ee_pos": {
-            "dtype": "float32",
-            "shape": (3,),
-            "names": ["ee_pos"],
-        },
-        "ee_quat": {
-            "dtype": "float32",
-            "shape": (4,),
-            "names": ["ee_quat"],
         },
         "gripper_width": {
             "dtype": "float32",
@@ -271,6 +349,41 @@ def legacy_features(
             "names": ["actions"],
         },
     }
+    if action_representation == "base_joint_relative":
+        features.update(
+            {
+                "base_pos": {
+                    "dtype": "float32",
+                    "shape": (3,),
+                    "names": ["base_pos"],
+                },
+                "base_quat": {
+                    "dtype": "float32",
+                    "shape": (4,),
+                    "names": ["base_quat"],
+                },
+                "arm_joint_pos": {
+                    "dtype": "float32",
+                    "shape": (4,),
+                    "names": ["arm_joint_pos"],
+                },
+            }
+        )
+    else:
+        features.update(
+            {
+                "ee_pos": {
+                    "dtype": "float32",
+                    "shape": (3,),
+                    "names": ["ee_pos"],
+                },
+                "ee_quat": {
+                    "dtype": "float32",
+                    "shape": (4,),
+                    "names": ["ee_quat"],
+                },
+            }
+        )
     if include_base_image:
         features["base_image"] = {
             "dtype": "image",
@@ -350,13 +463,19 @@ def create_dataset(
     image_writer_threads: int,
     image_writer_processes: int,
     action_dim: int,
+    action_representation: str,
 ) -> LeRobotDataset:
     return LeRobotDataset.create(
         repo_id=repo_id,
         root=output_root,
         robot_type="am_bench",
         fps=target_hz,
-        features=legacy_features(image_shape, include_base_image, action_dim=action_dim),
+        features=legacy_features(
+            image_shape,
+            include_base_image=include_base_image,
+            action_dim=action_dim,
+            action_representation=action_representation,
+        ),
         use_videos=False,
         image_writer_threads=image_writer_threads,
         image_writer_processes=image_writer_processes,
@@ -393,10 +512,11 @@ def export_episode(
     if usable_raw_steps < stride:
         return 0
 
+    state_slices = resolve_state_slices(info, state_key)
     actions = np.asarray([row[action_key] for row in rows[:usable_raw_steps]], dtype=np.float32)
     if action_representation == "delta":
         exported_actions = compose_delta_action_chunks(actions, stride)
-    elif action_representation in ("ee_relative", "ee_local_relative"):
+    elif action_representation in ("ee_relative", "ee_local_relative", "base_joint_relative"):
         exported_actions = actions[::stride][: usable_raw_steps // stride].astype(np.float32, copy=False)
     else:
         raise ValueError(f"Unsupported action representation: {action_representation}")
@@ -405,8 +525,6 @@ def export_episode(
     for logical_index, raw_index in enumerate(range(0, usable_raw_steps, stride)):
         row = rows[raw_index]
         state = np.asarray(row[state_key], dtype=np.float32).reshape(-1)
-        if state.shape[0] < 8:
-            raise ValueError(f"Expected 8D state prefix, got {state.shape} in {dataset_root}.")
 
         task_index = int(row["task_index"])
         if task_index not in prompt_cache:
@@ -420,12 +538,25 @@ def export_episode(
 
         frame = {
             "ee_image": decode_image(row[ee_image_key], dataset_root),
-            "ee_pos": state[0:3],
-            "ee_quat": state[3:7],
-            "gripper_width": state[7:8],
+            "gripper_width": state[state_slices["gripper_width"]],
             "actions": exported_actions[logical_index],
             "task": prompt_cache[task_index],
         }
+        if action_representation == "base_joint_relative":
+            frame.update(
+                {
+                    "base_pos": state[state_slices["base_pos"]],
+                    "base_quat": state[state_slices["base_quat"]],
+                    "arm_joint_pos": state[state_slices["arm_joint_pos"]],
+                }
+            )
+        else:
+            frame.update(
+                {
+                    "ee_pos": state[state_slices["ee_pos"]],
+                    "ee_quat": state[state_slices["ee_quat"]],
+                }
+            )
         if include_base_image:
             if has_base_image:
                 frame["base_image"] = decode_image(row[base_image_key], dataset_root)
@@ -497,6 +628,7 @@ def export_datasets(
         image_writer_threads=image_writer_threads,
         image_writer_processes=image_writer_processes,
         action_dim=action_dim,
+        action_representation=action_representation,
     )
 
     export_report: dict[str, Any] = {
@@ -602,12 +734,13 @@ def parse_args() -> argparse.Namespace:
         "--action_representation",
         type=str,
         default="delta",
-        choices=("delta", "ee_relative", "ee_local_relative"),
+        choices=("delta", "ee_relative", "ee_local_relative", "base_joint_relative"),
         help=(
             "Policy action representation to prepare. 'delta' expects 7D ee_delta source actions and "
             "composes them over --target_hz strides. 'ee_relative' and 'ee_local_relative' expect 8D "
             "ee_absolute source actions and keep absolute setpoints for quaternion-safe relative transforms "
-            "during OpenPI training."
+            "during OpenPI training. 'base_joint_relative' expects 12D base_joint_absolute source actions "
+            "and keeps absolute setpoints for Base+joints relative transforms during OpenPI training."
         ),
     )
     parser.add_argument("--task_prompt", type=str, default="")
