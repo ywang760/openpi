@@ -3490,7 +3490,6 @@ dependencies = [
     { name = "msgpack" },
     { name = "numpy" },
     { name = "pillow" },
-    { name = "tree" },
     { name = "websockets" },
 ]
 
@@ -3505,7 +3504,6 @@ requires-dist = [
     { name = "msgpack", specifier = ">=1.0.5" },
     { name = "numpy", specifier = ">=1.22.4,<2.0.0" },
     { name = "pillow", specifier = ">=9.0.0" },
-    { name = "tree", specifier = ">=0.2.4" },
     { name = "websockets", specifier = ">=11.0" },
 ]
 
@@ -5039,15 +5037,6 @@ wheels = [
 ]
 
 [[package]]
-name = "svgwrite"
-version = "1.4.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/16/c1/263d4e93b543390d86d8eb4fc23d9ce8a8d6efd146f9427364109004fa9b/svgwrite-1.4.3.zip", hash = "sha256:a8fbdfd4443302a6619a7f76bc937fc683daf2628d9b737c891ec08b8ce524c3", size = 189516, upload-time = "2022-07-14T14:05:26.107Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/84/15/640e399579024a6875918839454025bb1d5f850bb70d96a11eabb644d11c/svgwrite-1.4.3-py3-none-any.whl", hash = "sha256:bb6b2b5450f1edbfa597d924f9ac2dd099e625562e492021d7dd614f65f8a22d", size = 67122, upload-time = "2022-07-14T14:05:24.459Z" },
-]
-
-[[package]]
 name = "sympy"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -5399,12 +5388,12 @@ dependencies = [
     { name = "typing-extensions", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:e748b84e700634fbf08f62319e18e228c861895fd41ea7c73043c81d6d0968c4" },
-    { url = "https://download.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:cc241ffb20428f6a44c299ca06b934445606cf1fa48f3b68ef3af0a04c86bc3b" },
-    { url = "https://download.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:92a92db6cde38d05220c1f7de91ceacff020546386c5b7a0a268dcaae17b5c18" },
-    { url = "https://download.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:bd7331780bd444077792b699a535b20a7f1275e3bca99f6bec3c88d324bb0bee" },
-    { url = "https://download.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:a656d92ec2c8305a00b061f0cac1da4df54bf491fd937e10754c76518a5ce87b" },
-    { url = "https://download.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:f3f3cce8e6c13887bedf0354de3a2f4ca8989e9c3d9cb8dc3bc77f7eddf6ea97" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:e748b84e700634fbf08f62319e18e228c861895fd41ea7c73043c81d6d0968c4", upload-time = "2025-10-14T17:30:31Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:cc241ffb20428f6a44c299ca06b934445606cf1fa48f3b68ef3af0a04c86bc3b", upload-time = "2025-10-14T17:30:43Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:92a92db6cde38d05220c1f7de91ceacff020546386c5b7a0a268dcaae17b5c18", upload-time = "2025-10-14T17:31:01Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:bd7331780bd444077792b699a535b20a7f1275e3bca99f6bec3c88d324bb0bee", upload-time = "2025-10-14T17:31:14Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:a656d92ec2c8305a00b061f0cac1da4df54bf491fd937e10754c76518a5ce87b", upload-time = "2025-10-14T17:31:28Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.9.0%2Bcu130-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:f3f3cce8e6c13887bedf0354de3a2f4ca8989e9c3d9cb8dc3bc77f7eddf6ea97", upload-time = "2025-10-14T17:31:43Z" },
 ]
 
 [[package]]
@@ -5492,12 +5481,12 @@ dependencies = [
     { name = "torch", version = "2.9.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:11f26360e37da18e82b57e6cccc37c8ae23a36d9211c147c2a37938af8660334" },
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:0be70bd2e71fceec225da9436650c7c830ec71a9443071a3a5b66d1b27ebd9df" },
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:b7a9d83c0a56d7b8d9018450c2f686d269b151553e64ca9e7ff611fefff74ab8" },
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:7617870d4ad2a067c62512c024f66dce703d744ce424c374fdead66c047ef0ab" },
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:507a45b6874fdf46b5dd15d3a03b10b5612fe50658b2fb4de3998ad45758c1af" },
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:c9a290a0ace580854c8f741ec3c8cc1a1fce16a8ad51d298d3f8d9c985527f0e" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:11f26360e37da18e82b57e6cccc37c8ae23a36d9211c147c2a37938af8660334", upload-time = "2025-10-15T14:05:31Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:0be70bd2e71fceec225da9436650c7c830ec71a9443071a3a5b66d1b27ebd9df", upload-time = "2025-10-15T14:05:31Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:b7a9d83c0a56d7b8d9018450c2f686d269b151553e64ca9e7ff611fefff74ab8", upload-time = "2025-10-15T14:05:32Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:7617870d4ad2a067c62512c024f66dce703d744ce424c374fdead66c047ef0ab", upload-time = "2025-10-15T14:05:32Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:507a45b6874fdf46b5dd15d3a03b10b5612fe50658b2fb4de3998ad45758c1af", upload-time = "2025-10-15T14:05:32Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.0%2Bcu130-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:c9a290a0ace580854c8f741ec3c8cc1a1fce16a8ad51d298d3f8d9c985527f0e", upload-time = "2025-10-15T14:05:32Z" },
 ]
 
 [[package]]
@@ -5570,18 +5559,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/4c/67/80f51466ec447028f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/96/88/beb33a79a382fcd2aed0be5222bdc47f41e4bfe7aaa90ae1374f1d8ea2af/transformers-4.53.2-py3-none-any.whl", hash = "sha256:db8f4819bb34f000029c73c3c557e7d06fc1b8e612ec142eecdae3947a9c78bf", size = 10826609, upload-time = "2025-07-11T12:39:05.461Z" },
 ]
-
-[[package]]
-name = "tree"
-version = "0.2.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "pillow" },
-    { name = "setuptools" },
-    { name = "svgwrite" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/29/3f/63cbed2909786f0e5ac30a4ae5791ad597c6b5fec7167e161c55bba511ce/Tree-0.2.4.tar.gz", hash = "sha256:f84d8ec9bf50dd69f551da78925a23d110864e7706551f590cdade27646f7883", size = 6489, upload-time = "2018-07-03T20:49:29.918Z" }
 
 [[package]]
 name = "treescope"
