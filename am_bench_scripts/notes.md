@@ -18,6 +18,8 @@ This is the current step-by-step path for launching the first `pi-0.5` PyTorch f
   - reads canonical LeRobot parquet directly, applies AM-Bench delta-action resampling, and writes OpenPI's pinned legacy LeRobot layout
 - `ext/openpi/am_bench_scripts/v3_lerobot_to_legacy.py`
   - rewrites the current LeRobot v3 export into the older LeRobot layout pinned by this OpenPI fork
+- `ext/openpi/am_bench_scripts/make_legacy_task_subset.py`
+  - filters an OpenPI legacy LeRobot dataset down to one task and rewrites episode/task/index metadata
 - `ext/openpi/am_bench_scripts/hdf5_to_lerobot.py`
   - legacy compatibility path for older raw AM Isaac HDF5 episodes
 
