@@ -292,7 +292,7 @@ def validate_source_info(
                 f"Direct OpenPI delta export expects ee_delta source actions. "
                 f"Dataset {dataset_root} reports action_semantics={action_semantics!r}."
             )
-    elif action_representation in ("ee_relative", "ee_local_relative"):
+    elif action_representation == "ee_local_relative":
         require_state_keys(
             resolve_state_slices(info, state_key),
             EE_STATE_KEYS,
@@ -516,7 +516,7 @@ def export_episode(
     actions = np.asarray([row[action_key] for row in rows[:usable_raw_steps]], dtype=np.float32)
     if action_representation == "delta":
         exported_actions = compose_delta_action_chunks(actions, stride)
-    elif action_representation in ("ee_relative", "ee_local_relative", "base_joint_relative"):
+    elif action_representation in ("ee_local_relative", "base_joint_relative"):
         exported_actions = actions[::stride][: usable_raw_steps // stride].astype(np.float32, copy=False)
     else:
         raise ValueError(f"Unsupported action representation: {action_representation}")
@@ -734,12 +734,12 @@ def parse_args() -> argparse.Namespace:
         "--action_representation",
         type=str,
         default="delta",
-        choices=("delta", "ee_relative", "ee_local_relative", "base_joint_relative"),
+        choices=("delta", "ee_local_relative", "base_joint_relative"),
         help=(
             "Policy action representation to prepare. 'delta' expects 7D ee_delta source actions and "
-            "composes them over --target_hz strides. 'ee_relative' and 'ee_local_relative' expect 8D "
-            "ee_absolute source actions and keep absolute setpoints for quaternion-safe relative transforms "
-            "during OpenPI training. 'base_joint_relative' expects 12D base_joint_absolute source actions "
+            "composes them over --target_hz strides. 'ee_local_relative' expects 8D ee_absolute source "
+            "actions and keeps absolute setpoints for quaternion-safe local-relative transforms during "
+            "OpenPI training. 'base_joint_relative' expects 12D base_joint_absolute source actions "
             "and keeps absolute setpoints for Base+joints relative transforms during OpenPI training."
         ),
     )
