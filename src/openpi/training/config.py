@@ -392,9 +392,7 @@ class LeRobotAmBenchDataConfig(DataConfigFactory):
             am_bench_policy.EELocalRelativeCache() if self.action_representation == "ee_local_relative" else None
         )
         base_joint_relative_cache = (
-            am_bench_policy.BaseJointRelativeCache()
-            if self.action_representation == "base_joint_relative"
-            else None
+            am_bench_policy.BaseJointRelativeCache() if self.action_representation == "base_joint_relative" else None
         )
         data_transforms = _transforms.Group(
             inputs=[
@@ -839,26 +837,6 @@ _CONFIGS = [
         ),
         batch_size=32,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "ee_local_relative"},
-    ),
-    TrainConfig(
-        name="pi0_am_bench_multitask_openpi_original_20hz_h16_ee_local_relative",
-        model=pi0_config.Pi0Config(action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/multitask_openpi_original_20hz_ee_local_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="ee_local_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
         num_train_steps=10_000,
         policy_metadata={"action_representation": "ee_local_relative"},
     ),
@@ -873,145 +851,8 @@ _CONFIGS = [
         ),
         batch_size=32,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
         num_train_steps=10_000,
         policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi0_am_bench_multitask_base_joint_openpi_original_20hz_h16_base_joint_relative",
-        model=pi0_config.Pi0Config(action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/multitask_base_joint_openpi_original_20hz_base_joint_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="base_joint_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi0_am_bench_press_button_base_joint_pid_openpi_original_20hz_h16_base_joint_relative",
-        model=pi0_config.Pi0Config(action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/press_button_base_joint_pid_openpi_original_20hz_base_joint_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="base_joint_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi0_am_bench_push_slider_base_joint_pid_openpi_original_20hz_h16_base_joint_relative",
-        model=pi0_config.Pi0Config(action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/push_slider_base_joint_pid_openpi_original_20hz_base_joint_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="base_joint_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi0_am_bench_press_button_push_slider_base_joint_pid_openpi_original_20hz_h16_base_joint_relative",
-        model=pi0_config.Pi0Config(action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/press_button_push_slider_base_joint_pid_openpi_original_20hz_base_joint_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="base_joint_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi0_am_bench_press_button_base_joint_l1_openpi_original_20hz_h16_base_joint_relative",
-        model=pi0_config.Pi0Config(action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/press_button_base_joint_l1_openpi_original_20hz_base_joint_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="base_joint_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi0_am_bench_push_slider_base_joint_l1_openpi_original_20hz_h16_base_joint_relative",
-        model=pi0_config.Pi0Config(action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/push_slider_base_joint_l1_openpi_original_20hz_base_joint_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="base_joint_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi0_am_bench_press_button_push_slider_base_joint_l1_openpi_original_20hz_h16_base_joint_relative",
-        model=pi0_config.Pi0Config(action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/press_button_push_slider_base_joint_l1_openpi_original_20hz_base_joint_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="base_joint_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi0_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi05_am_bench_press_button",
-        model=pi0_config.Pi0Config(pi05=True, action_horizon=10),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/press_button",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()
-        ),
-        num_train_steps=20_000,
     ),
     TrainConfig(
         name="pi05_am_bench_multitask_openpi_original_20hz_h50_ee_local_relative",
@@ -1024,26 +865,6 @@ _CONFIGS = [
         ),
         batch_size=32,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "ee_local_relative"},
-    ),
-    TrainConfig(
-        name="pi05_am_bench_multitask_openpi_original_20hz_h16_ee_local_relative",
-        model=pi0_config.Pi0Config(pi05=True, action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/multitask_openpi_original_20hz_ee_local_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="ee_local_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()
-        ),
         num_train_steps=10_000,
         policy_metadata={"action_representation": "ee_local_relative"},
     ),
@@ -1058,26 +879,6 @@ _CONFIGS = [
         ),
         batch_size=32,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()
-        ),
-        num_train_steps=10_000,
-        policy_metadata={"action_representation": "base_joint_relative"},
-    ),
-    TrainConfig(
-        name="pi05_am_bench_multitask_base_joint_openpi_original_20hz_h16_base_joint_relative",
-        model=pi0_config.Pi0Config(pi05=True, action_horizon=16),
-        data=LeRobotAmBenchDataConfig(
-            repo_id="am_bench/multitask_base_joint_openpi_original_20hz_base_joint_relative",
-            base_config=DataConfig(prompt_from_task=True),
-            include_base_image=False,
-            action_representation="base_joint_relative",
-        ),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        pytorch_weight_path=str(
-            pathlib.Path("~/.cache/openpi/openpi-assets/checkpoints/pi05_base_pytorch").expanduser()
-        ),
         num_train_steps=10_000,
         policy_metadata={"action_representation": "base_joint_relative"},
     ),
