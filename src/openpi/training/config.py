@@ -18,6 +18,7 @@ import openpi.models.pi0_config as pi0_config
 import openpi.models.pi0_fast as pi0_fast
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
+import openpi.policies.am_bench_policy as am_bench_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
 import openpi.shared.download as _download
@@ -347,6 +348,70 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
         model_transforms = ModelTransformFactory()(model_config)
 
         # We return all data transforms for training and inference. No need to change anything here.
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class LeRobotAmBenchDataConfig(DataConfigFactory):
+    """DataConfig for fine-tuning and serving am_bench policies from LeRobot data."""
+
+    include_base_image: bool = True
+    action_representation: Literal["delta", "ee_local_relative", "base_joint_relative"] = "delta"
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        if self.action_representation == "base_joint_relative":
+            repack_structure = {
+                "am_bench/base_pos": "base_pos",
+                "am_bench/base_quat": "base_quat",
+                "am_bench/arm_joint_pos": "arm_joint_pos",
+                "am_bench/gripper_width": "gripper_width",
+                "am_bench/ee_image": "ee_image",
+                "actions": "actions",
+                "prompt": "prompt",
+            }
+        else:
+            repack_structure = {
+                "am_bench/ee_pos": "ee_pos",
+                "am_bench/ee_quat": "ee_quat",
+                "am_bench/gripper_width": "gripper_width",
+                "am_bench/ee_image": "ee_image",
+                "actions": "actions",
+                "prompt": "prompt",
+            }
+        if self.include_base_image:
+            repack_structure["am_bench/base_image"] = "base_image"
+
+        repack_transform = _transforms.Group(inputs=[_transforms.RepackTransform(repack_structure)])
+        ee_local_relative_cache = (
+            am_bench_policy.EELocalRelativeCache() if self.action_representation == "ee_local_relative" else None
+        )
+        base_joint_relative_cache = (
+            am_bench_policy.BaseJointRelativeCache() if self.action_representation == "base_joint_relative" else None
+        )
+        data_transforms = _transforms.Group(
+            inputs=[
+                am_bench_policy.AmBenchInputs(
+                    model_type=model_config.model_type,
+                    action_representation=self.action_representation,
+                    ee_local_relative_cache=ee_local_relative_cache,
+                    base_joint_relative_cache=base_joint_relative_cache,
+                )
+            ],
+            outputs=[
+                am_bench_policy.AmBenchOutputs(
+                    action_representation=self.action_representation,
+                    ee_local_relative_cache=ee_local_relative_cache,
+                    base_joint_relative_cache=base_joint_relative_cache,
+                )
+            ],
+        )
+        model_transforms = ModelTransformFactory()(model_config)
         return dataclasses.replace(
             self.create_base_config(assets_dirs, model_config),
             repack_transforms=repack_transform,
@@ -760,6 +825,62 @@ _CONFIGS = [
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi0_am_bench_multitask_openpi_original_20hz_h50_ee_local_relative",
+        model=pi0_config.Pi0Config(action_horizon=50),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/multitask_openpi_original_20hz_ee_local_relative",
+            base_config=DataConfig(prompt_from_task=True),
+            include_base_image=False,
+            action_representation="ee_local_relative",
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=10_000,
+        policy_metadata={"action_representation": "ee_local_relative"},
+    ),
+    TrainConfig(
+        name="pi0_am_bench_multitask_base_joint_openpi_original_20hz_h50_base_joint_relative",
+        model=pi0_config.Pi0Config(action_horizon=50),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/multitask_base_joint_openpi_original_20hz_base_joint_relative",
+            base_config=DataConfig(prompt_from_task=True),
+            include_base_image=False,
+            action_representation="base_joint_relative",
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=10_000,
+        policy_metadata={"action_representation": "base_joint_relative"},
+    ),
+    TrainConfig(
+        name="pi05_am_bench_multitask_openpi_original_20hz_h50_ee_local_relative",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=50),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/multitask_openpi_original_20hz_ee_local_relative",
+            base_config=DataConfig(prompt_from_task=True),
+            include_base_image=False,
+            action_representation="ee_local_relative",
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=10_000,
+        policy_metadata={"action_representation": "ee_local_relative"},
+    ),
+    TrainConfig(
+        name="pi05_am_bench_multitask_base_joint_openpi_original_20hz_h50_base_joint_relative",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=50),
+        data=LeRobotAmBenchDataConfig(
+            repo_id="am_bench/multitask_base_joint_openpi_original_20hz_base_joint_relative",
+            base_config=DataConfig(prompt_from_task=True),
+            include_base_image=False,
+            action_representation="base_joint_relative",
+        ),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=10_000,
+        policy_metadata={"action_representation": "base_joint_relative"},
     ),
     #
     # Fine-tuning Aloha configs.
